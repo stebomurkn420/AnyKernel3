@@ -21,7 +21,7 @@ ramdisk_compression=auto;
 
 ## AnyKernel methods (DO NOT CHANGE)
 # import patching functions/variables - see for reference
-. /tmp/anykernel/tools/ak2-core.sh;
+. /tmp/anykernel/tools/ak3-core.sh;
 
 
 ## AnyKernel install
