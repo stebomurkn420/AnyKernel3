@@ -4,59 +4,83 @@
 ## AnyKernel setup
 # begin properties
 properties() { '
-kernel.string=ExampleKernel by osm0sis @ xda-developers
+kernel.string=Dank Kernel for the Pixel 3a (XL) by @stebomurkn420
 do.devicecheck=1
 do.modules=0
 do.cleanup=1
 do.cleanuponabort=0
-device.name1=maguro
-device.name2=toro
-device.name3=toroplus
-device.name4=tuna
-device.name5=
-supported.versions=
+device.name1=bonito
+device.name2=sargo
 '; } # end properties
 
 # shell variables
-block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;
-is_slot_device=0;
+block=/dev/block/bootdevice/by-name/boot;
+is_slot_device=1;
 ramdisk_compression=auto;
 
 
 ## AnyKernel methods (DO NOT CHANGE)
 # import patching functions/variables - see for reference
-. tools/ak3-core.sh;
-
-
-## AnyKernel file attributes
-# set permissions/ownership for included ramdisk files
-chmod -R 750 $ramdisk/*;
-chown -R root:root $ramdisk/*;
+. /tmp/anykernel/tools/ak2-core.sh;
 
 
 ## AnyKernel install
 dump_boot;
 
+
+# Warn user of their support status
+android_version="$(file_getprop /system/build.prop "ro.build.version.release")";
+security_patch="$(file_getprop /system/build.prop "ro.build.version.security_patch")";
+version_info="$android_version:$security_patch";
+case "$version_info" in
+    "9:2019-07-05") support_status="a supported";;
+    *) support_status="an unsupported";;
+esac;
+ui_print " "; ui_print "You are on $android_version with the $security_patch security patch level! This is $support_status configuration..."
+
 # begin ramdisk changes
 
-# init.rc
-backup_file init.rc;
-replace_string init.rc "cpuctl cpu,timer_slack" "mount cgroup none /dev/cpuctl cpu" "mount cgroup none /dev/cpuctl cpu,timer_slack";
+rm -fr $ramdisk/overlay
 
-# init.tuna.rc
-backup_file init.tuna.rc;
-insert_line init.tuna.rc "nodiratime barrier=0" after "mount_all /fstab.tuna" "\tmount ext4 /dev/block/platform/omap/omap_hsmmc.0/by-name/userdata /data remount nosuid nodev noatime nodiratime barrier=0";
-append_file init.tuna.rc "bootscript" init.tuna;
+patch_cmdline "skip_override" ""
 
-# fstab.tuna
-backup_file fstab.tuna;
-patch_fstab fstab.tuna /system ext4 options "noatime,barrier=1" "noatime,nodiratime,barrier=0";
-patch_fstab fstab.tuna /cache ext4 options "barrier=1" "barrier=0,nomblk_io_submit";
-patch_fstab fstab.tuna /data ext4 options "data=ordered" "nomblk_io_submit,data=writeback";
-append_file fstab.tuna "usbdisk" fstab;
+# If the kernel image and dtbs are separated in the zip
+decompressed_image=/tmp/anykernel/kernel/Image
+compressed_image=$decompressed_image.lz4
+if [ -f $compressed_image ]; then
+  # Hexpatch the kernel if Magisk is installed ('skip_initramfs' -> 'want_initramfs')
+  if [ -d $ramdisk/.backup ]; then
+    ui_print " "; ui_print "Magisk detected! Patching kernel so reflashing Magisk is not necessary...";
+    $bin/magiskboot --decompress $compressed_image $decompressed_image;
+    $bin/magiskboot --hexpatch $decompressed_image 736B69705F696E697472616D667300 77616E745F696E697472616D667300;
+    $bin/magiskboot --compress=lz4 $decompressed_image $compressed_image;
+  fi;
 
-# end ramdisk changes
+  # Concatenate all of the dtbs to the kernel
+  cat $compressed_image /tmp/anykernel/dtbs/*.dtb > /tmp/anykernel/Image.lz4-dtb;
+fi;
 
+
+# Patch dtbo on custom ROMs
+hostname="$(file_getprop /system/build.prop "ro.build.host")"
+case "$hostname" in
+    *corp.google.com|abfarm*) host=google;;
+    *) host=custom;;
+esac
+if [ "$(file_getprop /system/build.prop "ro.build.user")" != "android-build" -o "$host" == "custom" ]; then
+  ui_print " "; ui_print "You are on a custom ROM, patching dtb to remove verity...";
+  $bin/magiskboot --dtb-patch /tmp/anykernel/Image.lz4-dtb;
+else
+  ui_print " "; ui_print "You are on stock, not patching dtb to remove verity!";
+fi;
+
+# Clean up files from other kernels
+mountpoint -q /data && {
+  rm -f /data/adb/magisk_simple/vendor/etc/powerhint.json
+  rm -f /data/adb/service.d/95-proton.sh
+  rm -f /data/adb/dtbo_a.orig.img /data/adb/dtbo_b.orig.img
+}
+
+
+# Install the boot image
 write_boot;
-## end install
-
