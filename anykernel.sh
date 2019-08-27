@@ -33,7 +33,7 @@ android_version="$(file_getprop /system/build.prop "ro.build.version.release")";
 security_patch="$(file_getprop /system/build.prop "ro.build.version.security_patch")";
 version_info="$android_version:$security_patch";
 case "$version_info" in
-    "9:2019-07-05") support_status="a supported";;
+    "9:2019-08-01") support_status="a supported";;
     *) support_status="an unsupported";;
 esac;
 ui_print " "; ui_print "You are on $android_version with the $security_patch security patch level! This is $support_status configuration..."
